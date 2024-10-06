@@ -1,10 +1,11 @@
 pipeline {
     agent any
-    environment {
-        SERVER_NAME = '' // Remplacez cette valeur par celle appropriée
-        TERRAFORM_ACTION = 'apply'  // Ou 'destroy', selon l'action souhaitée
-    }
     stages {
+        stage('Clone repository') {
+            steps {
+                git branch: 'main', url: 'https://github.com/Mariamyammoun/DevOps-Project.git'
+            }
+        }
         stage('Run Terraform and Ansible') {
             steps {
                 script {
@@ -13,7 +14,6 @@ pipeline {
                     set -xe
                     
                     cd Terraform
-                    
                     sed -i "s/server_name/${SERVER_NAME}/g" backend.tf
                     export TF_VAR_name=${SERVER_NAME}
                     
