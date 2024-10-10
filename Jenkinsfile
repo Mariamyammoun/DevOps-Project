@@ -1,38 +1,66 @@
 pipeline {
     agent any
-        environment {
-        AWS_ACCESS_KEY_ID = credentials('jenkins-aws') // Utilise l'ID du credential
-        AWS_SECRET_ACCESS_KEY = credentials('jenkins-aws') // L'ID de credential est utilisé pour les deux clés
-        SSH_KEY               = '/home/jenkins/.ssh/mariam-key.pem'   // Chemin de la clé SSH privée
+    environment {
+        AWS_ACCESS_KEY_ID = credentials('jenkins-aws') 
+        AWS_SECRET_ACCESS_KEY = credentials('jenkins-aws') 
+        SSH_KEY = '/home/jenkins/.ssh/mariam-key.pem' 
     }
-
     stages {
-        stage('Clone repository') {
-            steps {
-                git branch: 'main', url: 'https://github.com/Mariamyammoun/DevOps-Project.git'
-            }
-        }
-        stage('Run Terraform and Ansible') {
+        stage('Terraform Init') {
             steps {
                 script {
+                    // Initialiser Terraform
                     sh '''
                     #!/bin/bash
                     set -xe
-                    
                     cd Terraform
-                    sed -i "s/server_name/${SERVER_NAME}/g" backend.tf
+                    # Mettez à jour le fichier s3.tf avec le nom de serveur
+                    sed -i "s/server_name/${SERVER_NAME}/g" s3.tf
                     export TF_VAR_name=${SERVER_NAME}
-                    
                     terraform init
-                    terraform plan
-                    terraform $TERRAFORM_ACTION -auto-approve
+                    '''
+                }
+            }
+        }
+
+        stage('Terraform Apply') {
+            steps {
+                script {
+                    // Appliquer la configuration Terraform et créer l'instance
+                    sh '''
+                    #!/bin/bash
+                    cd Terraform
+                    terraform apply -auto-approve -var "server_name=${SERVER_NAME}"
+                    '''
                     
-                    if [ "$TERRAFORM_ACTION" = "destroy" ]; then
-                        exit 0
-                    else
-                        cd ../Ansible
-                        ansible-playbook -i /opt/ansible/inventory/aws_ec2.yaml apache.yaml
-                    fi
+                    // Récupérer l'adresse IP publique de l'instance EC2
+                    def public_ip = sh(script: '''
+                    #!/bin/bash
+                    cd Terraform
+                    terraform output -raw instance_public_ip
+                    ''', returnStdout: true).trim()
+
+                    // Créer le fichier d'inventaire Ansible
+                    writeFile file: 'inventaire', text: """
+                    [ec2]
+                    ${public_ip}
+
+                    [ec2:vars]
+                    ansible_user=ubuntu
+                    ansible_ssh_private_key_file=${env.SSH_KEY}
+                    ansible_ssh_common_args='-o StrictHostKeyChecking=no'
+                    """
+                }
+            }
+        }
+
+        stage('Ansible Setup') {
+            steps {
+                script {
+                    // Exécuter le playbook Ansible pour configurer l'instance
+                    sh '''
+                    cd Ansible
+                    ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i ../inventaire apache.yaml
                     '''
                 }
             }
