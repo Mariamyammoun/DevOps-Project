@@ -1,32 +1,50 @@
-- name: This sets up an httpd webserver
-  hosts: aws_ec2
+- name: Update apt repository
+  hosts: all
+  become: true 
+  tasks:
+    - name: Update apt repository
+      apt:
+        update_cache: yes
+
+
+- name: This sets up an apache2 webserver
+  hosts: ec2
   become: yes
-  remote_user: ec2-user
+  remote_user: ubuntu
   gather_facts: true
   vars:
     ansible_ssh_private_key_file: "/home/jenkins/.ssh/mariam-key.pem"  
-    ansible_ssh_user: "ec2-user"
+    ansible_ssh_user: "ubuntu"
+    ansible_python_interpreter: "/usr/bin/python3"
   tasks:
-  - name: "Install httpd and php packages"
-    package:
+    - name: "Install apache2 and php packages"
+      apt:
         name:
-          - "httpd"
+          - "apache2"
           - "php"
         state: present
-  - name: "copy code from GitHub"
-    get_url:
+
+    - name: "Copy code from GitHub"
+      get_url:
         url: https://www.shubhammishra.in
         dest: "/var/www/html/index.php"
-  - name: "Start httpd services"
-    service:
-        name: httpd
+
+    - name: "Start apache2 service"
+      service:
+        name: apache2
         state: started
-  - name: Yum Install Packages
-    yum: name={{item}} state=latest
-    with_items:
-       - wget
-  - name: terraform install
-    unarchive:
-      src: https://releases.hashicorp.com/terraform/0.9.1/terraform_0.9.1_linux_amd64.zip
-      dest: /usr/bin
-      remote_src: True
+
+    - name: "Install wget package"
+      apt:
+        name: wget
+        state: present
+    - name: "Install unzip package"
+      apt:
+        name: unzip
+        state: present
+
+    - name: "Install Terraform"
+      unarchive:
+        src: https://releases.hashicorp.com/terraform/0.9.1/terraform_0.9.1_linux_amd64.zip
+        dest: /usr/bin
+        remote_src: True
